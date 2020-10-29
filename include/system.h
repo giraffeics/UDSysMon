@@ -3,25 +3,39 @@
 
 #include <string>
 #include <vector>
+#include <time.h>
 
 #include "process.h"
 #include "processor.h"
+#include "cached_function.h"
+#include "linux_parser.h"
 
 class System {
  public:
-  Processor& Cpu();                   // TODO: See src/system.cpp
-  std::vector<Process>& Processes();  // TODO: See src/system.cpp
-  float MemoryUtilization();          // TODO: See src/system.cpp
-  long UpTime();                      // TODO: See src/system.cpp
-  int TotalProcesses();               // TODO: See src/system.cpp
-  int RunningProcesses();             // TODO: See src/system.cpp
-  std::string Kernel();               // TODO: See src/system.cpp
-  std::string OperatingSystem();      // TODO: See src/system.cpp
+  Processor& Cpu();
+  std::vector<Process>& Processes();
+  float MemoryUtilization();
+  long UpTime();
+  int TotalProcesses();
+  int RunningProcesses();
+  std::string Kernel();
+  std::string OperatingSystem();
+  System();
 
-  // TODO: Define any necessary private members
  private:
   Processor cpu_ = {};
   std::vector<Process> processes_ = {};
+
+  CachedFunction<float> cMemoryUtilization_ = {};
+  CachedFunction<long> cUptime_ = {};
+  CachedFunction<std::vector<Process>*, System*> cProcesses_ = {};
+
+  static std::vector<Process>* sProcesses(System* system);
+
+  bool osKnown_ = false;
+  std::string os_;
+  bool kernelKnown_ = false;
+  std::string kernel_;
 };
 
 #endif

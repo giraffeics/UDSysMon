@@ -6,28 +6,95 @@
 
 #include "process.h"
 
+#include "linux_parser.h"
+
 using std::string;
 using std::to_string;
 using std::vector;
 
-// TODO: Return this process's ID
-int Process::Pid() { return 0; }
+CachedFunction<long> Process::cfNumCores_(LinuxParser::NumCores, 1000000000);
 
-// TODO: Return this process's CPU utilization
-float Process::CpuUtilization() { return 0; }
+Process::Process(int pid)
+{
+    this->pid_ = pid;
 
-// TODO: Return the command that generated this process
-string Process::Command() { return string(); }
+    cfUtilization_.setFunction(Process::sUtilization);
+    cfUtilization_.setLifetime(500);
 
-// TODO: Return this process's memory utilization
-string Process::Ram() { return string(); }
+    cfCommand_.setFunction(LinuxParser::Command);
+    cfCommand_.setLifetime(1000);
 
-// TODO: Return the user (name) that generated this process
-string Process::User() { return string(); }
+    cfRam_.setFunction(LinuxParser::Ram);
+    cfRam_.setLifetime(500);
 
-// TODO: Return the age of this process (in seconds)
-long int Process::UpTime() { return 0; }
+    cfUser_.setFunction(LinuxParser::User);
+    cfUser_.setLifetime(1000);
 
-// TODO: Overload the "less than" comparison operator for Process objects
-// REMOVE: [[maybe_unused]] once you define the function
-bool Process::operator<(Process const& a[[maybe_unused]]) const { return true; }
+    cfUpTime_.setFunction(LinuxParser::UpTime);
+    cfUpTime_.setLifetime(950);
+}
+
+int Process::Pid()
+{
+    return pid_;
+}
+
+float Process::CpuUtilization()
+{
+    return cfUtilization_.get(this);
+}
+
+float Process::sUtilization(Process* process)
+{
+    // calculate active & idle times since last sUtilization() call
+    long active, idle;
+    LinuxParser::Jiffies(&active, &idle, process->pid_);
+    active -= process->prevActive;
+    idle -= process->prevIdle;
+
+    // return 0 utilization if this is the first sUtilization() call
+    if(process->prevActive == 0 && process->prevIdle == 0)
+    {
+        process->prevActive = active;
+        process->prevIdle = idle;
+        return 0.0f;
+    }
+
+    // calculate return value
+    float ret = (float) active / (float)(active + idle);
+
+    // write back total active & idle times
+    process->prevActive += active;
+    process->prevIdle += idle;
+
+    process->lastUtilization = ret;
+
+    return ret / cfNumCores_.get();
+}
+
+string Process::Command()
+{
+    return cfCommand_.get(pid_);
+}
+
+string Process::Ram()
+{
+    return cfRam_.get(pid_);
+}
+
+string Process::User()
+{
+    return cfUser_.get(pid_);
+}
+
+long int Process::UpTime()
+{
+    return cfUpTime_.get(pid_);
+}
+
+bool Process::operator<(Process const& other) const
+{
+    if(other.lastUtilization == this->lastUtilization)
+        return (other.pid_ > this->pid_);
+    return (other.lastUtilization < this->lastUtilization);
+}

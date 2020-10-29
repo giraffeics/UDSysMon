@@ -7,32 +7,129 @@
 #include "process.h"
 #include "processor.h"
 #include "system.h"
+#include "linux_parser.h"
 
 using std::set;
 using std::size_t;
 using std::string;
 using std::vector;
 
-// TODO: Return the system's CPU
-Processor& System::Cpu() { return cpu_; }
+System::System()
+{
+    cMemoryUtilization_.setFunction(LinuxParser::MemoryUtilization);
+    cMemoryUtilization_.setLifetime(500);
 
-// TODO: Return a container composed of the system's processes
-vector<Process>& System::Processes() { return processes_; }
+    cUptime_.setFunction(LinuxParser::UpTime);
+    cUptime_.setLifetime(950);
 
-// TODO: Return the system's kernel identifier (string)
-std::string System::Kernel() { return string(); }
+    cProcesses_.setFunction(System::sProcesses);
+    cProcesses_.setLifetime(500);
+}
 
-// TODO: Return the system's memory utilization
-float System::MemoryUtilization() { return 0.0; }
+Processor& System::Cpu()
+{
+    return cpu_;
+}
 
-// TODO: Return the operating system name
-std::string System::OperatingSystem() { return string(); }
+vector<Process>& System::Processes()
+{
+    return *(cProcesses_.get(this));
+}
 
-// TODO: Return the number of processes actively running on the system
-int System::RunningProcesses() { return 0; }
+long binSearchPIDIndex(std::vector<Process>& processes, int pid, long begin, long end)
+{
+    long low = begin;
+    long high = end;
+    long i = (low+high)/2;
 
-// TODO: Return the total number of processes on the system
-int System::TotalProcesses() { return 0; }
+    while(high >= low)
+    {
+        int curPid = processes[i].Pid();
 
-// TODO: Return the number of seconds since the system started running
-long int System::UpTime() { return 0; }
+        if(curPid > pid)
+        {
+            high = i-1;
+            i = (low+high)/2;
+        }
+        else if(curPid < pid)
+        {
+            low = i+1;
+            i = (low+high)/2;
+        }
+        else
+            return i;
+    }
+
+    return -1;
+}
+
+bool processComparePID(Process& a, Process& b)
+{
+    return (a.Pid() < b.Pid());
+}
+
+bool processCompareCPU(Process& a, Process& b)
+{
+    float aCpu = a.CpuUtilization();
+    float bCpu = b.CpuUtilization();
+    if(aCpu == bCpu)
+        return (a.Pid() < b.Pid());
+    return (aCpu > bCpu);
+}
+
+std::vector<Process>* System::sProcesses(System* system)
+{
+    std::vector<int> pids = LinuxParser::Pids();
+
+    // Add any missing PIDs to the list
+    std::sort(system->processes_.begin(), system->processes_.end(), processComparePID);
+    auto lastIndex = system->processes_.size() - 1;
+    for(int pid : pids)
+    {
+        long index = binSearchPIDIndex(system->processes_, pid, 0, lastIndex);
+
+        if(index < 0)
+            system->processes_.push_back(Process(pid));
+    }
+
+    // Sort into display order
+    std::sort(system->processes_.begin(), system->processes_.end(), processCompareCPU);
+
+    return &(system->processes_);
+}
+
+std::string System::Kernel()
+{
+    if(!kernelKnown_)
+        kernel_ = LinuxParser::Kernel();
+
+    return kernel_;
+}
+
+float System::MemoryUtilization()
+{ 
+    return cMemoryUtilization_.get();
+}
+
+std::string System::OperatingSystem()
+{
+    if(!osKnown_)
+        os_ = LinuxParser::OperatingSystem();
+
+    return os_;
+}
+
+int System::RunningProcesses()
+{
+    return LinuxParser::RunningProcesses();
+}
+
+int System::TotalProcesses()
+{
+    return LinuxParser::TotalProcesses();
+}
+
+long int System::UpTime()
+{
+    return cUptime_.get();
+}

@@ -1,12 +1,19 @@
 #ifndef PROCESSOR_H
 #define PROCESSOR_H
 
-class Processor {
- public:
-  float Utilization();  // TODO: See src/processor.cpp
+#include <cached_function.h>
 
-  // TODO: Declare any necessary private members
- private:
+class Processor {
+    public:
+        Processor();
+        float Utilization();
+
+    private:
+        static float sUtilization(Processor* processor);
+        CachedFunction<float, Processor*> cfUtilization_ = {};
+
+        long prevActive = 0;
+        long prevIdle = 0;
 };
 
 #endif
